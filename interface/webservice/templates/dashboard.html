@@ -56,22 +56,23 @@
 </head>
 <body>
   <h1><span class="status-dot online" id="status-dot"></span>Servicio Web — Red de Nodos IoT</h1>
-  <div class="subtitle">Datos leídos en vivo del canal UDP de los nodos · actualiza cada 3s</div>
+  <div class="subtitle">Consultado por TCP al servidor central (LIST_NODES / GET_MEASUREMENTS / GET_ALERTS / GET_SYSTEM_STATUS) · actualiza cada 3s</div>
 
   <div class="cards">
     <div class="card"><div class="label">Estado</div><div class="value" id="c-status">—</div></div>
     <div class="card"><div class="label">Nodos activos</div><div class="value" id="c-active">—</div></div>
-    <div class="card"><div class="label">Nodos vistos</div><div class="value" id="c-seen">—</div></div>
+    <div class="card"><div class="label">Nodos registrados</div><div class="value" id="c-registered">—</div></div>
     <div class="card"><div class="label">Uptime (s)</div><div class="value" id="c-uptime">—</div></div>
-    <div class="card"><div class="label">Mensajes DATA</div><div class="value" id="c-data">—</div></div>
-    <div class="card"><div class="label">Alertas</div><div class="value" id="c-alerts">—</div></div>
+    <div class="card"><div class="label">Datos recibidos</div><div class="value" id="c-data">—</div></div>
+    <div class="card"><div class="label">Datos perdidos</div><div class="value" id="c-lost">—</div></div>
+    <div class="card"><div class="label">Alertas totales</div><div class="value" id="c-alerts">—</div></div>
   </div>
 
   <section>
     <h2>Nodos</h2>
     <table id="nodes-table">
       <thead>
-        <tr><th>ID</th><th>Estado</th><th>Últ. visto (s)</th><th>TEMP</th><th>HUMD</th><th>ELEC</th></tr>
+        <tr><th>ID</th><th>Estado</th><th>Última lectura</th><th>TEMP</th><th>HUMD</th><th>ELEC</th></tr>
       </thead>
       <tbody id="nodes-body"></tbody>
     </table>
@@ -88,30 +89,38 @@
   </section>
 
 <script>
+function fmtTime(ts) {
+  if (!ts) return '—';
+  return new Date(ts * 1000).toLocaleTimeString();
+}
+
 async function refresh() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
 
-    document.getElementById('c-status').textContent = data.server_status;
-    document.getElementById('c-active').textContent = data.active_nodes;
-    document.getElementById('c-seen').textContent = data.nodes_seen + ' / ' + data.known_nodes;
+    document.getElementById('c-status').textContent = data.server_status === 'online' ? 'en línea' : 'sin conexión';
+    document.getElementById('c-active').textContent = data.nodes_active;
+    document.getElementById('c-registered').textContent = data.nodes_registered;
     document.getElementById('c-uptime').textContent = data.uptime_seconds;
     document.getElementById('c-data').textContent = data.counters.data_received;
-    document.getElementById('c-alerts').textContent = data.counters.alerts_received;
+    document.getElementById('c-lost').textContent = data.counters.data_lost;
+    document.getElementById('c-alerts').textContent = data.counters.alerts_total;
 
     const nodesBody = document.getElementById('nodes-body');
     const entries = Object.entries(data.nodes);
-    if (entries.length === 0) {
-      nodesBody.innerHTML = '<tr><td colspan="6" class="empty">Todavía no llegó ningún dato. Corré simulators/main.py apuntando a este puerto UDP.</td></tr>';
+    if (data.server_status !== 'online') {
+      nodesBody.innerHTML = '<tr><td colspan="6" class="empty">No se pudo conectar al servidor. Verificá que esté corriendo y que SERVER_HOST/SERVER_PORT apunten ahí.</td></tr>';
+    } else if (entries.length === 0) {
+      nodesBody.innerHTML = '<tr><td colspan="6" class="empty">El servidor no tiene nodos registrados.</td></tr>';
     } else {
       nodesBody.innerHTML = entries.map(([id, n]) => {
         const r = n.readings || {};
-        const fmt = (v) => v ? v.value + ' (' + v.timestamp + ')' : '—';
+        const fmt = (v) => (v !== undefined ? v : '—');
         return `<tr>
           <td>${id}</td>
           <td><span class="badge ${n.active ? 'active' : 'inactive'}">${n.active ? 'activo' : 'inactivo'}</span></td>
-          <td>${n.seconds_since_last_seen}</td>
+          <td>${fmtTime(n.timestamp)}</td>
           <td>${fmt(r.TEMP)}</td>
           <td>${fmt(r.HUMD)}</td>
           <td>${fmt(r.ELEC)}</td>
@@ -125,9 +134,9 @@ async function refresh() {
     } else {
       alertsBody.innerHTML = data.recent_alerts.map(a => `<tr>
         <td>${a.node_id}</td>
-        <td><span class="badge alert">${a.alert_type}</span></td>
+        <td><span class="badge alert">${a.code}</span></td>
         <td>${a.value}</td>
-        <td>${a.timestamp}</td>
+        <td>${fmtTime(a.timestamp)}</td>
       </tr>`).join('');
     }
   } catch (e) {

@@ -53,37 +53,6 @@ def query(host, port, commands, timeout=3.0):
 
 # ---------- Parsing de cada tipo de respuesta ----------
 
-def is_error(line):
-    return line.startswith("ERROR|")
-
-
-def parse_error(line):
-    """ERROR|CODIGO|DESCRIPCION -> {code, description}"""
-    parts = line.split("|", 2)
-    if len(parts) >= 3 and parts[0] == "ERROR":
-        return {"code": parts[1], "description": parts[2]}
-    return {"code": "ERR_DESCONOCIDO", "description": line}
-
-
-def parse_status_resp(line):
-    """STATUS_RESP|ID|ESTADO|TS|VAR:VAL|... -> {node_id, status, timestamp, readings}"""
-    parts = line.split("|")
-    if len(parts) < 4 or parts[0] != "STATUS_RESP":
-        return None
-    node_id, estado, timestamp_txt = parts[1], parts[2], parts[3]
-    readings = {}
-    for field in parts[4:]:
-        if ":" not in field:
-            continue
-        variable, value = field.split(":", 1)
-        try:
-            readings[variable] = float(value)
-        except ValueError:
-            pass
-    timestamp = int(timestamp_txt) if timestamp_txt.lstrip("-").isdigit() else None
-    return {"node_id": node_id, "status": estado, "timestamp": timestamp, "readings": readings}
-
-
 def parse_nodes_resp(line):
     """NODES_RESP|<total>|NODE01:ONLINE,NODE02:OFFLINE,... -> {id: bool}"""
     parts = line.split("|")
