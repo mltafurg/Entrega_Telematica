@@ -61,6 +61,7 @@ Utiliza este flujo para desplegar el servidor en AWS y conectarle los nodos y el
 Conéctate a tu instancia de AWS EC2 y ejecuta:
 
 ```bash
+ssh -i "ruta\a\telematica-key.pem" ubuntu@IP-O-DOMINIO
 git clone https://github.com/tu-usuario/Entrega_Telematica.git
 cd Entrega_Telematica
 docker compose up -d --build
@@ -75,23 +76,28 @@ docker ps
 Abre un navegador e ingresa a la dirección de tu servidor AWS en el puerto 8080:
 ```text
 http://<IP_PUBLICA_EC2_O_DNS>:8080
-Ejemplo: http://ec2-54-156-62-108.compute-1.amazonaws.com:8080
+Ejemplo: telematica-entrega1-eafit.duckdns.org:8080
 ```
+Dominio gratuito creado en duckdns.org, apuntando a esa IP elástica: telematica-entrega1-eafit.duckdns.org. Para probar ejecuta:
+```bash
+nslookup telematica-entrega1-eafit.duckdns.org
+```
+Servicio web el cual da una vista general de lo que esta sucediendo con los nodos.
 
 ### Paso 3: Ejecutar Nodos Simuladores desde tu PC Local
-Desde una terminal en tu computadora personal, apunta los nodos hacia el servidor en la nube usando el DNS o IP pública de AWS:
+Desde una terminal en tu computadora personal situado en la carpeta de tu proyecto, apunta los nodos hacia el servidor en la nube usando el DNS o IP pública de AWS:
 
 - **Linux / macOS:**
   ```bash
-  SERVER_HOST="ec2-54-156-62-108.compute-1.amazonaws.com" SERVER_PORT="5000" python simulators/main.py
+  SERVER_HOST="telematica-entrega1-eafit.duckdns.org" SERVER_PORT="5000" python simulators/main.py
   ```
 - **Windows (PowerShell):**
   ```powershell
-  $env:SERVER_HOST="ec2-54-156-62-108.compute-1.amazonaws.com"; $env:SERVER_PORT="5000"; python simulators/main.py
+  $env:SERVER_HOST="telematica-entrega1-eafit.duckdns.org"; $env:SERVER_PORT="5000"; python simulators/main.py
   ```
 
 ### Paso 4: Ejecutar el Cliente Operador GUI desde tu PC Local
-En otra terminal en tu PC, conecta la interfaz gráfica al servidor en AWS:
+En otra terminal en tu PC sin detener los simuladores, conecta la interfaz gráfica al servidor en AWS:
 
 - **Linux / macOS:**
   ```bash
@@ -99,9 +105,17 @@ En otra terminal en tu PC, conecta la interfaz gráfica al servidor en AWS:
   ```
 - **Windows (PowerShell):**
   ```powershell
-  $env:SERVER_HOST="ec2-54-156-62-108.compute-1.amazonaws.com"; $env:SERVER_PORT="5000"; python clients/operator_gui.py
+  $env:SERVER_HOST="telematica-entrega1-eafit.duckdns.org"; $env:SERVER_PORT="5000"; python clients/operator_gui.py
   ```
+Interfaz iteractiva con 5 pestañas: Nodos activos, Últimas mediciones, Consultar nodo, Alertas, Estado general. Se auto-actualiza cada 4 segundos (togglable).
 
+**Para apagar todo**
+
+En la instancia por SSH:
+
+```bash
+docker compose down
+```
 ---
 
 ## 4. Escenario B: Ejecución y Pruebas 100% Locales (en tu PC)
