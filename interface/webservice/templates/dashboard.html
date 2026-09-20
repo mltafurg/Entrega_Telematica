@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telemática — Servicio Web</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --accent: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 20px; font-size: 0.9rem; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; }
+  .card .value { font-size: 1.6rem; font-weight: 600; margin-top: 4px; }
+  .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.online { background: var(--green); }
+  section { margin-bottom: 28px; }
+  section h2 { font-size: 1rem; color: var(--accent); margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  th { color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; }
+  .badge.active { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge.inactive { background: rgba(148,163,184,0.15); color: var(--muted); }
+  .badge.alert { background: rgba(239,68,68,0.15); color: var(--red); }
+  .empty { color: var(--muted); padding: 14px; font-size: 0.88rem; }
+</style>
+</head>
+<body>
+  <h1><span class="status-dot online" id="status-dot"></span>Servicio Web — Red de Nodos IoT</h1>
+  <div class="subtitle">Datos leídos en vivo del canal UDP de los nodos · actualiza cada 3s</div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Estado</div><div class="value" id="c-status">—</div></div>
+    <div class="card"><div class="label">Nodos activos</div><div class="value" id="c-active">—</div></div>
+    <div class="card"><div class="label">Nodos vistos</div><div class="value" id="c-seen">—</div></div>
+    <div class="card"><div class="label">Uptime (s)</div><div class="value" id="c-uptime">—</div></div>
+    <div class="card"><div class="label">Mensajes DATA</div><div class="value" id="c-data">—</div></div>
+    <div class="card"><div class="label">Alertas</div><div class="value" id="c-alerts">—</div></div>
+  </div>
+
+  <section>
+    <h2>Nodos</h2>
+    <table id="nodes-table">
+      <thead>
+        <tr><th>ID</th><th>Estado</th><th>Últ. visto (s)</th><th>TEMP</th><th>HUMD</th><th>ELEC</th></tr>
+      </thead>
+      <tbody id="nodes-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Alertas recientes</h2>
+    <table id="alerts-table">
+      <thead>
+        <tr><th>Nodo</th><th>Tipo</th><th>Valor</th><th>Timestamp</th></tr>
+      </thead>
+      <tbody id="alerts-body"></tbody>
+    </table>
+  </section>
+
+<script>
+async function refresh() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    document.getElementById('c-status').textContent = data.server_status;
+    document.getElementById('c-active').textContent = data.active_nodes;
+    document.getElementById('c-seen').textContent = data.nodes_seen + ' / ' + data.known_nodes;
+    document.getElementById('c-uptime').textContent = data.uptime_seconds;
+    document.getElementById('c-data').textContent = data.counters.data_received;
+    document.getElementById('c-alerts').textContent = data.counters.alerts_received;
+
+    const nodesBody = document.getElementById('nodes-body');
+    const entries = Object.entries(data.nodes);
+    if (entries.length === 0) {
+      nodesBody.innerHTML = '<tr><td colspan="6" class="empty">Todavía no llegó ningún dato. Corré simulators/main.py apuntando a este puerto UDP.</td></tr>';
+    } else {
+      nodesBody.innerHTML = entries.map(([id, n]) => {
+        const r = n.readings || {};
+        const fmt = (v) => v ? v.value + ' (' + v.timestamp + ')' : '—';
+        return `<tr>
+          <td>${id}</td>
+          <td><span class="badge ${n.active ? 'active' : 'inactive'}">${n.active ? 'activo' : 'inactivo'}</span></td>
+          <td>${n.seconds_since_last_seen}</td>
+          <td>${fmt(r.TEMP)}</td>
+          <td>${fmt(r.HUMD)}</td>
+          <td>${fmt(r.ELEC)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    const alertsBody = document.getElementById('alerts-body');
+    if (data.recent_alerts.length === 0) {
+      alertsBody.innerHTML = '<tr><td colspan="4" class="empty">Sin alertas todavía.</td></tr>';
+    } else {
+      alertsBody.innerHTML = data.recent_alerts.map(a => `<tr>
+        <td>${a.node_id}</td>
+        <td><span class="badge alert">${a.alert_type}</span></td>
+        <td>${a.value}</td>
+        <td>${a.timestamp}</td>
+      </tr>`).join('');
+    }
+  } catch (e) {
+    document.getElementById('c-status').textContent = 'sin conexión';
+  }
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+services:
+  servidor:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: servidor-telematica
+    restart: unless-stopped
+    environment:
+      PUERTO_TCP: 5000
+      PUERTO_UDP: 5000
+      NODOS_REGISTRADOS: NODE01,NODE02,NODE03,NODE04,NODE05
+    ports:
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
