@@ -46,25 +46,31 @@ ACCIÓN|PARAMETRO_1|PARAMETRO_2|...|PARAMETRO_N\n
   * **Respuesta:** `STATUS_RESP|ID_NODO|ESTADO|TIMESTAMP|VAR1:VAL|VAR2:VAL|VAR3:VAL\n`
   * **Regla:** `ESTADO` toma el valor `ONLINE` si el nodo ha reportado telemetría en los últimos 15 segundos, o `OFFLINE` en caso contrario. Para nodos registrados sin mediciones previas, responde `STATUS_RESP|NODE02|OFFLINE|0`.
 
-* **`LIST_NODES` / `NODES_RESP`**
+* **`LIST_NODES` (1 campo) / `NODES_RESP`**
   * **Estructura Consulta:** `LIST_NODES\n`
-  * **Estructura Respuesta:** `NODES_RESP|NODE01:ONLINE|NODE02:OFFLINE|...\n`
-  * **Descripción:** Devuelve la lista de nodos registrados y su estado actual en la red.
+  * **Estructura Respuesta:** `NODES_RESP|TOTAL|ID_NODO:ESTADO,ID_NODO:ESTADO,...\n`
+  * **Ejemplo:** `NODES_RESP|5|NODE01:ONLINE,NODE02:ONLINE,NODE03:OFFLINE,NODE04:ONLINE,NODE05:ONLINE\n`
+  * **Descripción:** Devuelve todos los nodos registrados y su estado actual. Los nodos van separados por coma.
 
-* **`GET_MEASUREMENTS` / `MEASUREMENTS_RESP`**
+* **`GET_MEASUREMENTS` (1 campo) / `MEASUREMENTS_RESP`**
   * **Estructura Consulta:** `GET_MEASUREMENTS\n`
-  * **Estructura Respuesta:** `MEASUREMENTS_RESP|NODE01:TEMP:25.4:1758744000|...\n`
-  * **Descripción:** Consulta las últimas mediciones de cada variable para todos los nodos.
+  * **Estructura Respuesta:** `MEASUREMENTS_RESP|TOTAL|ID_NODO,TIMESTAMP,VAR:VAL,VAR:VAL;ID_NODO,TIMESTAMP,VAR:VAL...\n`
+  * **Ejemplo:** `MEASUREMENTS_RESP|2|NODE01,1758744006,TEMP:24.8,HUMD:65.2,ELEC:150.4;NODE02,1758744009,TEMP:21.3\n`
+  * **Descripción:** Últimas mediciones de cada variable para todos los nodos. Los nodos van separados por punto y coma, y solo aparecen las variables que el nodo ya reportó. Un nodo registrado que aún no ha enviado nada aparece como `ID_NODO,0`.
 
-* **`GET_ALERTS` / `ALERTS_RESP`**
+* **`GET_ALERTS` (1 campo) / `ALERTS_RESP`**
   * **Estructura Consulta:** `GET_ALERTS\n`
-  * **Estructura Respuesta:** `ALERTS_RESP|TOTAL_ALERTAS|NODO|TIPO|VALOR|TIMESTAMP|...\n`
-  * **Descripción:** Retorna el historial de alertas detectadas en el sistema.
+  * **Estructura Respuesta:** `ALERTS_RESP|TOTAL|ID_NODO,TIPO_ALERTA,VALOR,TIMESTAMP;ID_NODO,TIPO_ALERTA,VALOR,TIMESTAMP...\n`
+  * **Ejemplo:** `ALERTS_RESP|2|NODE03,TEMP_HIGH,42.1,1758744000;NODE04,TEMP_HIGH,41.7,1758743990\n`
+  * **Descripción:** Retorna como máximo las 10 alertas más recientes, de la más nueva a la más antigua. Si no hay ninguna, responde `ALERTS_RESP|0|`.
 
-* **`GET_SYSTEM_STATUS` / `SYSTEM_STATUS_RESP`**
+* **`GET_SYSTEM_STATUS` (1 campo) / `SYSTEM_STATUS_RESP`**
   * **Estructura Consulta:** `GET_SYSTEM_STATUS\n`
-  * **Estructura Respuesta:** `SYSTEM_STATUS_RESP|REGISTRADOS|ACTIVOS|TOTAL_ALERTAS|PAQUETES_RECIBIDOS\n`
-  * **Descripción:** Retorna el resumen del estado global de la infraestructura.
+  * **Estructura Respuesta:** `SYSTEM_STATUS_RESP|UPTIME=s|NODES_REGISTERED=n|NODES_ACTIVE=n|ALERTS=n|DATA_RECEIVED=n|DATA_LOST=n\n`
+  * **Ejemplo:** `SYSTEM_STATUS_RESP|UPTIME=251|NODES_REGISTERED=5|NODES_ACTIVE=5|ALERTS=16|DATA_RECEIVED=243|DATA_LOST=0\n`
+  * **Descripción:** Resumen del estado global. `UPTIME` son los segundos desde que arrancó el servidor, `ALERTS` el total de alertas desde el arranque, y `DATA_LOST` los `DATA` perdidos inferidos por saltos en la secuencia.
+
+* **Regla general de TCP:** un comando con un número de campos distinto al indicado, o desconocido, recibe `ERROR|ERR_001|...`. Un `GET_STATUS` de un nodo no registrado recibe `ERROR|ERR_002|...`.
 
 ---
 
@@ -73,10 +79,18 @@ ACCIÓN|PARAMETRO_1|PARAMETRO_2|...|PARAMETRO_N\n
 #### 4.1. Variables de Telemetría
 * **`TEMP`**: Temperatura ambiental medida en grados Celsius (°C). Ejemplo: `24.8`.
 * **`HUMD`**: Humedad relativa en porcentaje (%). Ejemplo: `65.2`.
-* **`ELEC`**: Consumo energético en kilovatios-hora (kWh) o Watts. Ejemplo: `150.4`.
+* **`ELEC`**: Consumo eléctrico en Watts (W). Ejemplo: `150.4`.
+
+**Rangos válidos:** `TEMP` de −50 a 80, `HUMD` de 0 a 100, `ELEC` de 0 en adelante.
+
+**Umbrales de alerta del servidor:** `TEMP` ≥ 40 genera `TEMP_HIGH`, `HUMD` ≥ 90 genera `HUMD_HIGH` y `ELEC` ≥ 249 genera `ELEC_HIGH`.
+
+**Nodos registrados:** el servidor arranca con `NODE01` a `NODE05` registrados (configurable con la variable de entorno `NODOS_REGISTRADOS`). Cualquier otro `ID_NODO` recibe `ERR_002`.
+
+**Formato numérico:** los valores se envían con hasta 2 decimales, sin ceros de sobra (`24.8`, no `24.80`).
 
 #### 4.2. Tipos de Datos Auxiliares
-* **Secuencia:** Número entero positivo estrictamente creciente que permite al servidor rastrear datagramas y detectar pérdidas en UDP.
+* **Secuencia:** Número entero positivo que permite al servidor rastrear datagramas y detectar pérdidas en UDP. Un salto hacia adelante se cuenta como mensajes perdidos, una secuencia menor a la última se interpreta como reinicio del nodo y una repetida se descarta como duplicado.
 * **Timestamp:** Representación de tiempo en formato Epoch (número entero de segundos desde el 1 de enero de 1970 UTC).
 
 ---
@@ -93,12 +107,14 @@ ERROR|CÓDIGO|DESCRIPCIÓN\n
 
 | Código | Nombre | Descripción |
 | :---: | :--- | :--- |
-| `ERR_001` | Formato inválido | La estructura no cumple con el número de campos o separadores esperados (`|`). |
-| `ERR_002` | Nodo desconocido | El `ID_NODO` reportado no está registrado en el servidor. |
+| `ERR_001` | Formato inválido | Número de campos o separadores incorrectos, trama sin salto de línea final, tipo de mensaje desconocido o línea de más de 512 bytes. |
+| `ERR_002` | Nodo desconocido | El `ID_NODO` no está registrado en el servidor. También se devuelve en `GET_STATUS` de un nodo inexistente. |
 | `ERR_003` | Variable no reconocida | La variable enviada no pertenece al catálogo permitido (`TEMP`, `HUMD`, `ELEC`). |
-| `ERR_004` | Valor fuera de rango | El valor numérico reportado es físicamente imposible o viola los límites del protocolo. |
-| `ERR_005` | Secuencia inválida | El valor de la secuencia no es un número entero válido. |
-| `ERR_006` | Timestamp inválido | El timestamp no sigue el formato Epoch entero correcto. |
+| `ERR_004` | Valor fuera de rango | El valor no es numérico o está fuera del rango de la variable, es decir, es físicamente imposible. |
+| `ERR_005` | Secuencia inválida | La secuencia no es un entero positivo. |
+| `ERR_006` | Timestamp inválido | El timestamp no es un entero positivo en formato Epoch. |
+
+Cuando una trama tiene varios errores, el servidor informa solo el primero, evaluando en este orden: campos, `ID_NODO`, secuencia, variable, valor y timestamp.
 
 #### 5.2. Políticas de Manejo de Errores en los Nodos
 
